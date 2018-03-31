@@ -1,0 +1,262 @@
+#include <ESP8266_AT.h>
+
+#include <TimedAction.h>
+#include <LiquidCrystal.h>
+
+/*
+   Code to detect pulses from the PulseSensor,
+   using an interrupt service routine.
+
+   Here is a link to the tutorial\
+   https://pulsesensor.com/pages/getting-advanced
+
+   Copyright World Famous Electronics LLC - see LICENSE
+   Contributors:
+     Joel Murphy, https://pulsesensor.com
+     Yury Gitman, https://pulsesensor.com
+     Bradford Needham, @bneedhamia, https://bluepapertech.com
+
+   Licensed under the MIT License, a copy of which
+   should have been included with this software.
+
+   This software is not intended for medical use.
+*/
+
+/*
+   Every Sketch that uses the PulseSensor Playground must
+   define USE_ARDUINO_INTERRUPTS before including PulseSensorPlayground.h.
+   Here, #define USE_ARDUINO_INTERRUPTS true tells the library to use
+   interrupts to automatically read and process PulseSensor data.
+
+   See ProcessEverySample.ino for an example of not using interrupts.
+*/
+#define USE_ARDUINO_INTERRUPTS true
+#include <PulseSensorPlayground.h>
+
+/*
+   The format of our output.
+
+   Set this to PROCESSING_VISUALIZER if you're going to run
+    the Processing Visualizer Sketch.
+    See https://github.com/WorldFamousElectronics/PulseSensor_Amped_Processing_Visualizer
+
+   Set this to SERIAL_PLOTTER if you're going to run
+    the Arduino IDE's Serial Plotter.
+*/
+const int OUTPUT_TYPE = SERIAL_PLOTTER;
+int backlightPin=9;
+/*
+   Pinout:
+     PIN_INPUT = Analog Input. Connected to the pulse sensor
+      purple (signal) wire.
+     PIN_BLINK = digital Output. Connected to an LED (and 220 ohm resistor)
+      that will flash on each detected pulse.
+     PIN_FADE = digital Output. PWM pin onnected to an LED (and resistor)
+      that will smoothly fade with each pulse.
+      NOTE: PIN_FADE must be a pin that supports PWM. Do not use
+      pin 9 or 10, because those pins' PWM interferes with the sample timer.
+*/
+const int PIN_INPUT = A0;
+const int PIN_BLINK = 13;    // Pin 13 is the on-board LED
+const int PIN_FADE = 5;
+const int THRESHOLD = 550;   // Adjust this number to avoid noise when idle
+float cel;
+int tempPin = A1;
+
+/*
+   All the PulseSensor Playground functions.
+*/
+PulseSensorPlayground pulseSensor;
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+ /* Select Demo */
+//#define RECEIVE_DEMO        /* Define RECEIVE demo */
+#define SEND_DEMO         /* Define SEND demo */
+
+/* Define Required fields shown below */
+#define DOMAIN        "192.168.1.45"
+#define PORT        "80"
+#define API_WRITE_KEY   "NMHU4WRKCJDQ6JS5"
+#define CHANNEL_ID      "413329"
+
+#define SSID        "Gam3a_Station2"
+#define PASSWORD      "gam3a_4004"
+
+char _buffer[150];
+uint8_t Connect_Status;
+#ifdef SEND_DEMO
+uint8_t Sample = 0;
+#endif
+
+
+//this is our first task, print an incrementing number to the LCD
+void incrementNumber(){
+    Connect_Status = ESP8266_connected();
+    if(Connect_Status == ESP8266_NOT_CONNECTED_TO_AP)    /*Again check connection to WIFI*/
+    ESP8266_JoinAccessPoint(SSID, PASSWORD);    /*Connect to WIFI*/
+    if(Connect_Status == ESP8266_TRANSMISSION_DISCONNECTED)
+    ESP8266_Start(0, DOMAIN, PORT);   /*Connect to TCP port*/
+    #ifdef SEND_DEMO
+    memset(_buffer, 0, 150);
+    
+    //sprintf(_buffer, "GET /esppost.php?temp=%d&temp1=%d HTTP/1.1\r\nHost:http://192.168.1.45\r\n\r\n",cel,Sample++); 
+     sprintf(_buffer, "GET /esppost.php?temp=%d&temp1=%d HTTP/1.1\r\nHost: 192.168.1.45\r\n\r\n",pulseSensor.getBeatsPerMinute(),cel); 
+    /*connect to thingspeak server to post data using your API_WRITE_KEY*/
+    //sprintf(_buffer, "GET /esppost.php?temp1=%d HTTP/1.1\r\nHost:http://192.168.1.45\r\n\r\n" ,cel);
+    ESP8266_Send(_buffer);
+//    delay(15000); /* Thingspeak server delay */
+    #endif
+    
+    #ifdef RECEIVE_DEMO
+    memset(_buffer, 0, 150);
+    sprintf(_buffer, "GET /channels/%s/feeds/last.txt", CHANNEL_ID); /*Connect to thingspeak server to get data using your channel ID*/
+    ESP8266_Send(_buffer);
+    Read_Data(_buffer);
+  //  delay(600);
+    #endif
+  
+}
+
+//our second task, fires every few seconds and rotates text strings
+void changeText(){  
+  // Print a message to the LCD.
+  
+  lcd.setCursor(0, 0);
+  lcd.print("heart rate= ");
+  lcd.setCursor(12,0);
+  lcd.print(pulseSensor.getBeatsPerMinute());
+  lcd.setCursor(0,1 );
+  lcd.print("Temprature= ");
+  lcd.setCursor(11,1);
+  lcd.print(cel);
+  
+}
+
+//Create a couple timers that will fire repeatedly every x ms
+
+//edit: these lines used to be in front of incrementNumber and changeText
+//      functions. this didn't work because the functions weren't defined yet!
+TimedAction numberThread = TimedAction(15000,incrementNumber);
+TimedAction textThread = TimedAction(3000,changeText);
+//PulseSensor * = new PulseSensor[SensorCount];
+
+// where's our third task? well, it's the main loop itself :) the task
+// which repeats most often should be used as the loop. other
+// tasks are able to "interrupt" the fastest repeating task.
+
+
+void setup() {
+  /*
+     Use 115200 baud because that's what the Processing Sketch expects to read,
+     and because that speed provides about 11 bytes per millisecond.
+
+     If we used a slower baud rate, we'd likely write bytes faster than
+     they can be transmitted, which would mess up the timing
+     of readSensor() calls, which would make the pulse measurement
+     not work properly.
+  */
+  Serial.begin(115200);
+while(!ESP8266_Begin());
+  ESP8266_WIFIMode(BOTH_STATION_AND_ACCESPOINT);/* 3 = Both (AP and STA) */
+  ESP8266_ConnectionMode(SINGLE);     /* 0 = Single; 1 = Multi */
+  ESP8266_ApplicationMode(NORMAL);    /* 0 = Normal Mode; 1 = Transperant Mode */
+  if(ESP8266_connected() == ESP8266_NOT_CONNECTED_TO_AP)  /*Check WIFI connection*/
+  ESP8266_JoinAccessPoint(SSID, PASSWORD);    /*Connect to WIFI*/
+  ESP8266_Start(0, DOMAIN, PORT);
+  
+  // Configure the PulseSensor manager.
+
+  pulseSensor.analogInput(PIN_INPUT);
+  pulseSensor.blinkOnPulse(PIN_BLINK);
+  pulseSensor.fadeOnPulse(PIN_FADE);
+
+  pulseSensor.setSerial(Serial);
+  pulseSensor.setOutputType(OUTPUT_TYPE);
+  pulseSensor.setThreshold(THRESHOLD);
+
+  // Now that everything is ready, start reading the PulseSensor signal.
+  if (!pulseSensor.begin()) {
+    /*
+       PulseSensor initialization failed,
+       likely because our particular Arduino platform interrupts
+       aren't supported yet.
+
+       If your Sketch hangs here, try ProcessEverySample.ino,
+       which doesn't use interrupts.
+    */
+    for(;;) {
+      // Flash the led to show things didn't work.
+      digitalWrite(PIN_BLINK, LOW);
+      delay(50);
+      digitalWrite(PIN_BLINK, HIGH);
+      delay(50);
+    }
+  }
+   lcd.begin(16, 2);
+  //fire changeText once to paint the initial string [0]
+  changeText();
+}
+
+void loop() {
+  /*
+     Wait a bit.
+     We don't output every sample, because our baud rate
+     won't support that much I/O.
+  */
+  //check on our threads. based on how long the system has been
+  //running, do they need to fire and do work? if so, do it!
+  numberThread.check();
+  textThread.check();
+  delay(20);
+
+  // write the latest sample to Serial.
+ pulseSensor.outputSample();
+
+  /*
+     If a beat has happened since we last checked,
+     write the per-beat information to Serial.
+   */
+  if (pulseSensor.sawStartOfBeat()) {
+     numberThread.check();
+    textThread.check();
+  pulseSensor.outputBeat();
+  }
+  //third task, fade in backlight from min to max brightness
+  //in increments of 5 points:
+  digitalWrite(13, HIGH);
+  for (int fadeValue = 0 ; fadeValue <= 255; fadeValue += 10) {
+    
+    //wait a second, why am i checking on the threads here? because
+    //this is a for loop. you must check on your threads during ANY
+    //loops that occur, including the main one!
+    numberThread.check();
+    textThread.check();
+    
+    //sets the value (range from 0 to 255):
+    analogWrite(backlightPin, fadeValue);
+    
+    // wait for 20 milliseconds to see the dimming effect
+    // keep delays on the main loop SHORT. these WILL prevent
+    // other threads from firing on time.
+    delay(20);
+  }
+
+  //fade out from max to min in increments of 5 points:
+  digitalWrite(13, LOW);
+  for (int fadeValue = 255 ; fadeValue >= 0; fadeValue -= 10) {
+    
+    //check on our threads again
+    numberThread.check();
+    textThread.check();
+    
+    //sets the value (range from 0 to 255):
+    analogWrite(backlightPin, fadeValue);
+    
+    //wait for 20 milliseconds to see the dimming effect
+    delay(20);
+  }
+int val = analogRead(tempPin);
+float mv = ( val/1024.0)*5000;
+float cel = mv/10;
+
+ 
+}
