@@ -1,0 +1,103 @@
+
+body{
+    margin: 0;
+    padding: 0;
+    font-family:cursive;
+     background:url("img.png");
+     background-size: 100%;
+
+    
+    
+}
+.header{ 
+   background:url("Healthcare Header.png");
+   background-repeat: no-repeat;
+    height: 80px;
+    color: #333;
+    font-size:40px;
+    text-align: center;
+    width: auto;
+}
+.navigation{
+    background:#00bcff;
+    font-size:18px;
+    text-align:right;
+    padding-right: 70px;
+}
+ul{list-style: none;padding: 0;margin: 0;}
+ul li {display: inline-block;padding: 12px;}
+.content{
+    margin-left: 300px;
+    text-align: center;
+     background: #aedaee;
+    color: #333;
+    font-size:20px;
+    padding: 12px;
+    opacity: 0.8;
+     width: 60%;
+    height: auto;
+}
+#sign{
+    background: #aedaee;
+    color: #333;
+    font-size:20px;
+    padding: 12px;
+    opacity: 0.8;
+    width: 50%;
+    height: auto;
+    display: inline-block;
+     vertical-align:top;
+
+   }
+
+#sidebar{
+    margin-left: 30px;
+   width: 15%;
+   height: auto;
+   background: #f5f5f0;
+    display: inline-block;
+    opacity: 0.8;
+     vertical-align:top;
+    
+}
+
+#rsidebar{
+    margin-left: 150px;
+   width: 15%;
+   height: auto;
+   background: #f5f5f0;
+    display: inline-block;
+    opacity: 0.8;
+     vertical-align:top;
+}
+.information button{
+width: 100%;
+}
+
+.user{
+margin-left: 150px;
+}
+.pass{
+    margin-left: 157px;
+}
+.Rem{
+    margin-left: 200px;
+}
+.signup{
+ margin-left: 70px;}
+
+
+
+.footer{
+    background: #333;
+    color: #FFF;
+    font-size:20px;
+    text-align: center;
+    padding: 10px;
+    margin-top: 300px;
+    height: 27px; 
+    width:100%;
+    position: absolute;
+    left: 0;
+    bottom: 0; 
+}
